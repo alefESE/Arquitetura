@@ -1,0 +1,7 @@
+lea eax, 1
+mov ebx, eax
+fatorial:
+sub ebx, 1
+mul eax, ebx
+cmp ebx, 1
+jnz fatorial
