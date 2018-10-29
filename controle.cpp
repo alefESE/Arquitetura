@@ -1,37 +1,44 @@
 #include <iostream>
 #include <fstream>
 #include <stdint.h>
-#include <cstring> // mem set
+#include <cstring> // memset
 #include <string> // string
-#include <cstdlib> // 
+#include <sstream>//stringstream
+#include <cstdlib> // atoi
 #include <algorithm> // find_if
 #include "registradores.h"
 #include "instrucoes.h"
 #include "PilhaEncadeada.h"
 #include "ListaDinamica.h"
-#include "ULA.h"
-#include "montador.h"
+#include "ULA.hpp"
+#include "montador.hpp"
+#include "FIFO.hpp"
 
 #define palavra 255
 
 //IR(simulacao)
-static char ir[palavra];
+static string ir;
 //flags
 unsigned char flags = NF;
+//parametros
+unsigned int tamanho_c = 0;
+unsigned int mapeamento_c = 0;
 
 void fechar(){
     destroi(pilha);
     destroi(labels);
     prog.close();
     mem.close();
+    fifo->~FIFO();
 }
 
 extern void bind_labels();
 extern void bind_mem();
 
 int main(int argc, char **argv){
-    if(argc < 3){
-        cout << "Modo de uso: controle <memoria>.txt <programa>.txt" << endl;
+    cout.flush();
+    if(argc < 4){
+        cout << "Modo de uso: controle <memoria>.txt <programa>.txt associatividade #tamanho" << endl;
         return 0;
     }
 
@@ -47,14 +54,17 @@ int main(int argc, char **argv){
         return 0;
     }
 
-    mem.open(argv[1]);
+    mem.open(argv[1], std::ios::out | std::ios::in | std::fstream::app);
     if(!mem.is_open()){
         mem.clear();
-        mem.open(argv[1], std::ios::out); // cria arquivo
-        mem.close();
-        mem.open(argv[1]);
+        mem.open(argv[1], std::ios::out | std::ios::out | std::fstream::trunc);
     } else cout << "Cuidado: o arquivo de memoria pode conter lixo" << endl;
     
+    mapeamento_c = atoi(argv[3]);
+    tamanho_c = atoi(argv[4]);
+    //caches
+    fifo =  new FIFO(tamanho_c, mapeamento_c);
+
     memset(&eax, 0, sizeof(eax));
     memset(&ebx, 0, sizeof(ebx));
     memset(&ecx, 0, sizeof(ecx));
@@ -77,23 +87,29 @@ int main(int argc, char **argv){
     bind_mem();
 
     string token;
+    cout << "Realizando fetch" << endl;
     int estado = Fetch;
     while(1){
         switch(estado){
             case Fetch:
             {
-                prog.getline(ir, palavra, '\n');
+                ir = fifo->fetch_inst(ip.x, mapeamento_c, &prog);
                 if(prog.eof() && prog.fail()){ // endoffile(ufa)
                     cout << "Programa terminado" << endl;
                     fechar();
+                    cout << "data_hit: " << fifo->get_data_hit() << endl;
+                    cout << "inst_hit: " << fifo->get_inst_hit() << endl;
+                    cout << "data_miss: " << fifo->get_data_miss() << endl;
+                    cout << "inst_miss: " << fifo->get_inst_miss() << endl;
+                    system("pause");
                     return 1;
                 }else if(prog.fail()){
                     cout << "Erro de sintaxe." << endl << "Verifique o codigo" << endl;
                     fechar(); 
                     return 0;
-                }else{
+                }else{ 
                     //cout << "ip " << ip.x << endl;
-                    cout << "Decdificando" << endl;
+                    cout << "Decodificando" << endl;
                     estado = Decode;
                     break;
                 }
@@ -239,12 +255,9 @@ int main(int argc, char **argv){
                         char *lbl = NULL;
                         int i;
                         ip.x = jmp(lbl, labels);
-                        prog.seekg (0, prog.beg); //"rebobina" stream
-                        for(i = 0; i < ip.x; i++){
-                            prog.getline(ir, palavra, '\n');
-                        }
-                        cout << "Decodificando" << endl;
-                        estado = Decode;
+                        cout << "AQUI" << endl;
+                        cout << "Realizando fetch" << endl;
+                        estado = Fetch;
                         break;
                     }
                     case JZ:
@@ -253,12 +266,8 @@ int main(int argc, char **argv){
                         int i;
                         if(flags & ZF){
                             ip.x = jmp(lbl, labels);
-                            prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -273,12 +282,8 @@ int main(int argc, char **argv){
                         int i;
                         if(!(flags & ZF)){
                             ip.x = jmp(lbl, labels);
-                            prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -293,12 +298,8 @@ int main(int argc, char **argv){
                         int i;
                         if(flags & CF){
                             ip.x = jmp(lbl, labels);
-                            prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -313,12 +314,8 @@ int main(int argc, char **argv){
                         int i;
                         if(!(flags & ZF)){
                             ip.x = jmp(lbl, labels);
-                            prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -333,12 +330,8 @@ int main(int argc, char **argv){
                         int i;
                         if(flags & OF){
                             ip.x = jmp(lbl, labels);
-                            prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -353,12 +346,8 @@ int main(int argc, char **argv){
                         int i;
                         if(!(flags & ZF)){
                             ip.x = jmp(lbl, labels);
-                            prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -373,12 +362,8 @@ int main(int argc, char **argv){
                         int i;
                         if(flags & CF){
                             ip.x = jmp(lbl, labels);
-                            prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -393,12 +378,8 @@ int main(int argc, char **argv){
                         int i;
                         if(!(flags & CF)){
                             ip.x = jmp(lbl, labels);
-                            prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -413,12 +394,8 @@ int main(int argc, char **argv){
                         int i;
                         if(flags & CF){
                             ip.x = jmp(lbl, labels);
-                            prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -434,11 +411,8 @@ int main(int argc, char **argv){
                         if((flags & ZF) || (flags & CF)){
                             ip.x = jmp(lbl, labels);
                             prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -453,12 +427,8 @@ int main(int argc, char **argv){
                         int i;
                         if(!(flags & CF)){
                             ip.x = jmp(lbl, labels);
-                            prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -473,12 +443,8 @@ int main(int argc, char **argv){
                         int i;
                         if(!((flags & ZF) && (flags & CF))){
                             ip.x = jmp(lbl, labels);
-                            prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -493,12 +459,8 @@ int main(int argc, char **argv){
                         int i;
                         if((flags & SF) != (flags & OF)){
                             ip.x = jmp(lbl, labels);
-                            prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -513,12 +475,8 @@ int main(int argc, char **argv){
                         int i;
                         if(((flags & SF) != (flags & OF)) || (flags & ZF)){
                             ip.x = jmp(lbl, labels);
-                            prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -533,12 +491,8 @@ int main(int argc, char **argv){
                         int i;
                         if((flags & SF) == (flags & OF)){
                             ip.x = jmp(lbl, labels);
-                            prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -553,12 +507,8 @@ int main(int argc, char **argv){
                         int i;
                         if(((flags & SF) == (flags & OF)) && !(flags & ZF)){
                             ip.x = jmp(lbl, labels);
-                            prog.seekg (0, prog.beg); //"rebobina" stream
-                            for(i = 0; i < ip.x; i++){
-                                prog.getline(ir, palavra, '\n');
-                            }
-                            cout << "Decodificando" << endl;
-                            estado = Decode;
+                            cout << "Realizando fetch" << endl;
+                            estado = Fetch;
                             break;
                         } else{
                             ip.x = ip.x + 1;
@@ -678,7 +628,7 @@ void bind_labels(){
             }
         }
     }
-    prog.clear(); // limpa as flags
+    prog.clear();
     prog.seekg (0, prog.beg); //"rebobina" stream
     //exibe(labels);
 }
@@ -688,10 +638,10 @@ void bind_mem(){
     int pos;
     int i = 0;
     while(!(mem.eof())){
-        getline(mem, s, '\n');
+        getline(mem, s);
         //cout << "mem eof: " << mem.eof() << endl;
         i++;
-        if(!((pos = s.find(':')) == -1)){
+        if((pos = s.find(':')) != -1){
             string erro = s.substr(pos+1);
             //cout << "erro: " << erro << endl;
             *remove_if(erro.begin(), erro.end(), ::isspace) = 0;
@@ -708,7 +658,7 @@ void bind_mem(){
             }
         }
     }
-    mem.clear(); // limpa as flags
+    mem.clear();
     mem.seekg (0, prog.beg); //"rebobina" stream
     //exibe(mems);
 }

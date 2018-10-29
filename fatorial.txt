@@ -5,3 +5,4 @@ sub ebx, 1
 mul eax, ebx
 cmp ebx, 1
 jnz fatorial
+str 2, eax
