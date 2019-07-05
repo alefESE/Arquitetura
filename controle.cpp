@@ -8,8 +8,6 @@
 #include <algorithm> // find_if
 #include "registradores.h"
 #include "instrucoes.h"
-#include "PilhaEncadeada.h"
-#include "ListaDinamica.h"
 #include "ULA.hpp"
 #include "montador.hpp"
 #include "FIFO.hpp"
